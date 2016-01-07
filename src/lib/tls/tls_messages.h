@@ -428,7 +428,8 @@ class Certificate_Verify : public Handshake_Message
       * @param state the handshake state
       */
       bool verify(const X509_Certificate& cert,
-                  const Handshake_State& state) const;
+                  const Handshake_State& state,
+                  const Policy& policy) const;
 
       Certificate_Verify(Handshake_IO& io,
                          Handshake_State& state,
@@ -496,7 +497,8 @@ class Server_Key_Exchange : public Handshake_Message
       const std::vector<byte>& params() const { return m_params; }
 
       bool verify(const Public_Key& server_key,
-                  const Handshake_State& state) const;
+                  const Handshake_State& state,
+                  const Policy& policy) const;
 
       // Only valid for certain kex types
       const Private_Key& server_kex_key() const;
