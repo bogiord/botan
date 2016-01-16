@@ -17,6 +17,7 @@
 #include <botan/hash.h>
 #include <botan/mac.h>
 #include <botan/cipher_mode.h>
+#include <botan/auto_rng.h>
 
 #if defined(BOTAN_HAS_PUBLIC_KEY_CRYPTO)
   #include <botan/pkcs8.h>
@@ -326,6 +327,15 @@ class Benchmark final : public Command
                bench_random_prime(msec);
                }
 #endif
+            else if(algo == "RNG")
+               {
+               bench_rng(Botan::system_rng(), "System_RNG", msec, buf_size);
+
+               Botan::AutoSeeded_RNG auto_rng;
+               bench_rng(auto_rng, "AutoSeeded_RNG", msec, buf_size);
+
+               //std::unique_ptr<Botan::RandomNumberGenerator> drbg_384(new Botan::HMAC_DRBG("SHA-384"));
+               }
             else
                {
                if(verbose() || !using_defaults)
@@ -469,6 +479,25 @@ class Benchmark final : public Command
             }
 
          output() << encrypt_timer << decrypt_timer;
+         }
+
+      void bench_rng(Botan::RandomNumberGenerator& rng,
+                     const std::string& rng_name,
+                     const std::chrono::milliseconds runtime,
+                     size_t buf_size)
+         {
+         Botan::secure_vector<uint8_t> buffer(buf_size * 1024);
+
+         Timer timer(rng_name, "", "generate", buffer.size());
+
+         while(timer.under(runtime))
+            {
+            //timer.run([&] { rng.randomize(buffer.data(), buffer.size()); });
+
+            timer.run([&] { for(size_t i = 0; i != buffer.size(); i++) buffer[i] = rng.next_byte(); });
+            }
+
+         output() << timer;
          }
 
 #if defined(BOTAN_HAS_NUMBERTHEORY)
