@@ -15,8 +15,14 @@
 
 namespace Botan {
 
-size_t RandomNumberGenerator::reseed(size_t bits_to_collect,
-                                     std::chrono::milliseconds timeout)
+size_t RandomNumberGenerator::reseed(size_t bits_to_collect)
+   {
+   return this->reseed_with_timeout(bits_to_collect,
+                                    BOTAN_RNG_RESEED_DEFAULT_TIMEOUT);
+   }
+
+size_t RandomNumberGenerator::reseed_with_timeout(size_t bits_to_collect,
+                                                  std::chrono::milliseconds timeout)
    {
    return this->reseed_with_sources(Entropy_Sources::global_sources(),
                                     bits_to_collect,
@@ -44,6 +50,11 @@ size_t RandomNumberGenerator::reseed_with_sources(Entropy_Sources& srcs,
    return bits_collected;
    }
 
+Stateful_RNG::Stateful_RNG(size_t bytes_before_reseed) :
+   m_max_bytes_before_reseed_required(bytes_before_reseed)
+   {
+   }
+
 size_t Stateful_RNG::reseed_with_sources(Entropy_Sources& srcs,
                                          size_t poll_bits,
                                          std::chrono::milliseconds poll_timeout)
@@ -52,9 +63,8 @@ size_t Stateful_RNG::reseed_with_sources(Entropy_Sources& srcs,
 
    if(bits_collected >= poll_bits)
       {
-      m_output_since_reseed = 0;
-      // Polls are assumed to be cummulative
-      m_entropy_collected += bits_collected;
+      m_successful_initialization = true;
+      m_bytes_since_reseed = 0;
       }
 
    return bits_collected;
@@ -62,17 +72,20 @@ size_t Stateful_RNG::reseed_with_sources(Entropy_Sources& srcs,
 
 void Stateful_RNG::reseed_check(size_t bytes_requested)
    {
-   m_output_since_reseed += bytes_requested;
+   const bool fork_detected = (m_last_pid > 0) && (OS::get_process_id() != m_last_pid);
 
-   uint32_t current_pid = OS::get_process_id();
+   m_bytes_since_reseed += bytes_requested;
+   m_last_pid = OS::get_process_id();
 
-   if(is_seeded() == false ||
-      m_output_since_reseed >= BOTAN_RNG_MAX_OUTPUT_BEFORE_RESEED ||
-      m_last_pid != current_pid)
+   if(!is_seeded() || fork_detected)
       {
-      this->reseed(security_level(), BOTAN_RNG_AUTO_RESEED_TIMEOUT);
-
-      m_last_pid = current_pid;
+      this->reseed(BOTAN_RNG_RESEED_POLL_BITS);
+      }
+   else if(m_max_bytes_before_reseed_required > 0 &&
+           m_bytes_since_reseed >= m_max_bytes_before_reseed_required)
+      {
+      this->reseed_with_timeout(BOTAN_RNG_AUTO_RESEED_POLL_BITS,
+                                BOTAN_RNG_AUTO_RESEED_TIMEOUT);
       }
 
    if(!is_seeded())
@@ -81,9 +94,15 @@ void Stateful_RNG::reseed_check(size_t bytes_requested)
       }
    }
 
+void Stateful_RNG::initialize_with(const byte input[], size_t len)
+   {
+   add_entropy(input, len);
+   m_successful_initialization = true;
+   }
+
 bool Stateful_RNG::is_seeded() const
    {
-   return (m_entropy_collected >= security_level());
+   return m_successful_initialization;
    }
 
 RandomNumberGenerator* RandomNumberGenerator::make_rng()
@@ -91,10 +110,15 @@ RandomNumberGenerator* RandomNumberGenerator::make_rng()
    return new AutoSeeded_RNG;
    }
 
-AutoSeeded_RNG::AutoSeeded_RNG()
+AutoSeeded_RNG::AutoSeeded_RNG(size_t max_bytes_before_reseed)
    {
-   m_rng.reset(new HMAC_DRBG("SHA-384"));
-   m_rng->reseed(384);
+   m_rng.reset(new HMAC_DRBG("SHA-384", max_bytes_before_reseed));
+   size_t bits = m_rng->reseed(384);
+   if(!m_rng->is_seeded())
+      {
+      throw Exception("AutoSeeded_RNG failed to gather enough entropy only got " +
+                      std::to_string(bits) + " bits");
+      }
    }
 
 void AutoSeeded_RNG::randomize(byte output[], size_t output_len)
@@ -105,14 +129,19 @@ void AutoSeeded_RNG::randomize(byte output[], size_t output_len)
    */
    typedef std::chrono::high_resolution_clock clock;
 
-   byte nonce_buf[12] = { 0 };
+   byte nonce_buf[16] = { 0 };
+   const uint32_t cur_ctr = m_counter++;
    const uint32_t cur_pid = OS::get_process_id();
    const uint64_t cur_time = clock::now().time_since_epoch().count();
 
-   store_le(cur_time, nonce_buf);
-   store_le(cur_pid,  nonce_buf + 8);
+   store_le(cur_ctr,  nonce_buf);
+   store_le(cur_pid,  nonce_buf + 4);
+   store_le(cur_time, nonce_buf + 8);
 
-   m_rng->randomize_with_input(output, output_len, nonce_buf, sizeof(nonce_buf));
+   m_rng->randomize_with_input(output, output_len,
+                               nonce_buf, sizeof(nonce_buf));
+
+   ++m_counter;
    }
 
 }

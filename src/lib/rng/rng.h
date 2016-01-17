@@ -88,14 +88,23 @@ class BOTAN_DLL RandomNumberGenerator
                                          std::chrono::milliseconds poll_timeout);
 
       /**
+      * Reseed this RNG from the default entropy sources and a default timeout
+      * @param bits_to_collect is the number of bits of entropy to
+      *        attempt to gather from the entropy sources
+      * @param poll_timeout try not to run longer than this, even if
+      *        not enough entropy has been collected
+      */
+      size_t reseed(size_t bits_to_collect = BOTAN_RNG_RESEED_POLL_BITS);
+
+      /**
       * Reseed this RNG from the default entropy sources
       * @param bits_to_collect is the number of bits of entropy to
       *        attempt to gather from the entropy sources
       * @param poll_timeout try not to run longer than this, even if
       *        not enough entropy has been collected
       */
-      size_t reseed(size_t bits_to_collect = BOTAN_RNG_RESEED_POLL_BITS,
-                    std::chrono::milliseconds poll_timeout = BOTAN_RNG_RESEED_DEFAULT_TIMEOUT);
+      size_t reseed_with_timeout(size_t bits_to_collect,
+                                 std::chrono::milliseconds poll_timeout);
 
       /**
       * Return a random vector
@@ -147,10 +156,19 @@ class BOTAN_DLL RandomNumberGenerator
 * Not implemented by RNGs which access an external RNG, such as the
 * system PRNG or an hardware RNG.
 */
-class Stateful_RNG : public RandomNumberGenerator
+class BOTAN_DLL Stateful_RNG : public RandomNumberGenerator
    {
    public:
+      Stateful_RNG(size_t max_output_before_reseed);
+
       virtual bool is_seeded() const override final;
+
+      /**
+      * Consume this input and mark the RNG as initialized regardless
+      * of the length of the input or the current seeded state of
+      * the RNG.
+      */
+      void initialize_with(const byte input[], size_t length);
 
       /**
       * Poll provided sources for up to poll_bits bits of entropy
@@ -161,19 +179,14 @@ class Stateful_RNG : public RandomNumberGenerator
                                  size_t poll_bits,
                                  std::chrono::milliseconds poll_timeout) override;
 
-      /**
-      * Estimate of security level provided by this RNG
-      */
-      virtual size_t security_level() const = 0;
-
    protected:
-
       void reseed_check(size_t bytes_requested);
 
    private:
-      size_t m_output_since_reseed = 0;
-      size_t m_entropy_collected = 0;
+      const size_t m_max_bytes_before_reseed_required;
+      size_t m_bytes_since_reseed = 0;
       uint32_t m_last_pid = 0;
+      bool m_successful_initialization = false;
    };
 
 /**

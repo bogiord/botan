@@ -11,38 +11,9 @@
 #include <deque>
 #include <string>
 #include <botan/rng.h>
-#include <botan/entropy_src.h>
 #include <botan/hex.h>
 
 namespace Botan_Tests {
-
-class Fixed_Output_Entropy_Source : public Botan::Entropy_Source
-   {
-   public:
-      std::string name() const override { return "Fixed_Output"; }
-
-      void poll(Botan::Entropy_Accumulator& accum) override
-         {
-         if(m_poll >= m_output.size())
-            throw Test_Error("Fixed_Output_Entropy_Source out of bytes");
-
-         accum.add(m_output[m_poll].data(),
-                   m_output[m_poll].size(),
-                   m_output[m_poll].size() * 8);
-         m_poll++;
-         };
-
-      Fixed_Output_Entropy_Source(const std::vector<uint8_t>& seed,
-                                  const std::vector<uint8_t>& reseed)
-         {
-         m_output.push_back(seed);
-         m_output.push_back(reseed);
-         }
-
-   private:
-      size_t m_poll = 0;
-      std::vector<std::vector<uint8_t>> m_output;
-   };
 
 class Fixed_Output_RNG : public Botan::RandomNumberGenerator
    {

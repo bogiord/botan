@@ -21,6 +21,9 @@ class BOTAN_DLL HMAC_DRBG final : public Stateful_RNG
    public:
       HMAC_DRBG(const std::string& hmac_hash);
 
+      HMAC_DRBG(const std::string& hmac_hash,
+                size_t max_bytes_before_reseed);
+
       std::string name() const override;
 
       void clear() override;
@@ -31,8 +34,6 @@ class BOTAN_DLL HMAC_DRBG final : public Stateful_RNG
                                 const byte input[], size_t input_len);
 
       void add_entropy(const byte input[], size_t input_len) override;
-
-      size_t security_level() const override;
    private:
       void update(const byte input[], size_t input_len);
 

@@ -10,7 +10,13 @@
 
 namespace Botan {
 
-HMAC_DRBG::HMAC_DRBG(const std::string& hmac_hash)
+HMAC_DRBG::HMAC_DRBG(const std::string& hmac_hash) :
+   HMAC_DRBG(hmac_hash, BOTAN_RNG_MAX_OUTPUT_BEFORE_RESEED)
+   {}
+
+HMAC_DRBG::HMAC_DRBG(const std::string& hmac_hash,
+                     size_t max_bytes_before_reseed) :
+   Stateful_RNG(max_bytes_before_reseed)
    {
    const std::string hmac = "HMAC(" + hmac_hash + ")";
 
@@ -37,15 +43,6 @@ std::string HMAC_DRBG::name() const
    return "HMAC_DRBG(" + m_mac->name() + ")";
    }
 
-size_t HMAC_DRBG::security_level() const
-   {
-   /*
-   This is the sqrt of the output size in bits, so eg 192 bits
-   security for SHA-384. This seems to match SP 800-90A
-   */
-   return m_mac->output_length() * 4;
-   }
-
 void HMAC_DRBG::randomize(byte output[], size_t output_len)
    {
    randomize_with_input(output, output_len, nullptr, 0);
@@ -58,7 +55,7 @@ void HMAC_DRBG::randomize(byte output[], size_t output_len)
 void HMAC_DRBG::randomize_with_input(byte output[], size_t output_len,
                                      const byte input[], size_t input_len)
    {
-   //reseed_check(output_len);
+   reseed_check(output_len);
 
    if(input_len > 0)
       {

@@ -5,7 +5,7 @@
 * Botan is released under the Simplified BSD License (see license.txt)
 */
 
-#include <botan/os_utils.h>
+#include <botan/internal/os_utils.h>
 #include <botan/exceptn.h>
 #include <botan/mem_ops.h>
 
